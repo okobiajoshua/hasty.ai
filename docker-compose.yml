@@ -1,0 +1,78 @@
+version: "3"
+services:
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: 'rabbitmq'
+    ports:
+    - 5672:5672
+    - 15672:15672
+    volumes:
+    - ~/.docker-conf/rabbitmq/data/:/var/lib/rabbitmq/
+    - ~/.docker-conf/rabbitmq/log/:/var/log/rabbitmq
+    networks:
+    - hasty_ai_net
+
+  redis:
+    image: redis
+    ports:
+    - 6379:6379
+    networks:
+    - hasty_ai_net
+
+  mongo:
+    image: mongo
+    restart: always
+    ports:
+    - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: user
+      MONGO_INITDB_ROOT_PASSWORD: secret
+    networks:
+      - hasty_ai_net
+
+  job_processor:
+    build: ./job_processor
+    environment:
+    - REDIS_URL=redis:6379
+    - QUEUE_HOSTNAME=rabbitmq:5672
+    - QUEUE_NAME=job_queue
+    - DB_HOSTNAME=mongo:27017
+    - DB_USER=user
+    - DB_PASSWORD=secret
+    links:
+    - redis
+    - rabbitmq
+    restart: on-failure
+    depends_on:
+    - rabbitmq
+    - redis
+    - mongo
+    networks:
+    - hasty_ai_net
+
+  app:
+    build: ./backend
+    ports:
+    - 8000:8000
+    environment:
+    - PORT=8000
+    - REDIS_URL=redis:6379
+    - QUEUE_HOSTNAME=rabbitmq:5672
+    - QUEUE_NAME=job_queue
+    - DB_HOSTNAME=mongo:27017
+    - DB_USER=user
+    - DB_PASSWORD=secret
+    links:
+    - redis
+    - rabbitmq
+    - mongo
+    restart: on-failure
+    depends_on:
+    - rabbitmq
+    - redis
+    networks:
+    - hasty_ai_net
+
+networks:
+  hasty_ai_net:
+    driver: bridge
